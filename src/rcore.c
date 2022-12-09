@@ -2446,10 +2446,6 @@ Shader LoadShader(const char *vsFileName, const char *fsFileName)
 Shader LoadShaderFromMemory(const char *vsCode, const char *fsCode)
 {
     Shader shader = { 0 };
-    shader.locs = (int *)RL_CALLOC(RL_MAX_SHADER_LOCATIONS, sizeof(int));
-
-    // NOTE: All locations must be reseted to -1 (no location)
-    for (int i = 0; i < RL_MAX_SHADER_LOCATIONS; i++) shader.locs[i] = -1;
 
     shader.id = rlLoadShaderCode(vsCode, fsCode);
 
@@ -2465,6 +2461,11 @@ Shader LoadShaderFromMemory(const char *vsCode, const char *fsCode)
         //          vertex texcoord2 location   = 5
 
         // NOTE: If any location is not found, loc point becomes -1
+        
+        shader.locs = (int *)RL_CALLOC(RL_MAX_SHADER_LOCATIONS, sizeof(int));
+
+        // All locations reseted to -1 (no location)
+        for (int i = 0; i < RL_MAX_SHADER_LOCATIONS; i++) shader.locs[i] = -1;
 
         // Get handles to GLSL input attibute locations
         shader.locs[SHADER_LOC_VERTEX_POSITION] = rlGetLocationAttrib(shader.id, RL_DEFAULT_SHADER_ATTRIB_NAME_POSITION);
@@ -2497,6 +2498,8 @@ void UnloadShader(Shader shader)
     if (shader.id != rlGetShaderIdDefault())
     {
         rlUnloadShaderProgram(shader.id);
+        
+        // NOTE: If shader loading failed, it should be 0
         RL_FREE(shader.locs);
     }
 }
@@ -2755,17 +2758,19 @@ float GetFrameTime(void)
 // NOTE: On PLATFORM_DESKTOP, timer is initialized on glfwInit()
 double GetTime(void)
 {
+    double time = 0.0;
 #if defined(PLATFORM_DESKTOP) || defined(PLATFORM_WEB)
-    return glfwGetTime();   // Elapsed time since glfwInit()
+    time = glfwGetTime();   // Elapsed time since glfwInit()
 #endif
 
 #if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM)
     struct timespec ts = { 0 };
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    unsigned long long int time = (unsigned long long int)ts.tv_sec*1000000000LLU + (unsigned long long int)ts.tv_nsec;
+    unsigned long long int nanoSeconds = (unsigned long long int)ts.tv_sec*1000000000LLU + (unsigned long long int)ts.tv_nsec;
 
-    return (double)(time - CORE.Time.base)*1e-9;  // Elapsed time since InitTimer()
+    time = (double)(nanoSeconds - CORE.Time.base)*1e-9;  // Elapsed time since InitTimer()
 #endif
+    return time;
 }
 
 // Setup window configuration flags (view FLAGS)
@@ -3291,12 +3296,12 @@ unsigned char *DecompressData(const unsigned char *compData, int compDataSize, i
 
 #if defined(SUPPORT_COMPRESSION_API)
     // Decompress data from a valid DEFLATE stream
-    data = RL_CALLOC(MAX_DECOMPRESSION_SIZE*1024*1024, 1);
+    data = (unsigned char *)RL_CALLOC(MAX_DECOMPRESSION_SIZE*1024*1024, 1);
     int length = sinflate(data, MAX_DECOMPRESSION_SIZE*1024*1024, compData, compDataSize);
 
     // WARNING: RL_REALLOC can make (and leave) data copies in memory, be careful with sensitive compressed data!
     // TODO: Use a different approach, create another buffer, copy data manually to it and wipe original buffer memory
-    unsigned char *temp = RL_REALLOC(data, length);
+    unsigned char *temp = (unsigned char *)RL_REALLOC(data, length);
 
     if (temp != NULL) data = temp;
     else TRACELOG(LOG_WARNING, "SYSTEM: Failed to re-allocate required decompression memory");
@@ -3322,7 +3327,7 @@ char *EncodeDataBase64(const unsigned char *data, int dataSize, int *outputSize)
 
     *outputSize = 4*((dataSize + 2)/3);
 
-    char *encodedData = RL_MALLOC(*outputSize);
+    char *encodedData = (char *)RL_MALLOC(*outputSize);
 
     if (encodedData == NULL) return NULL;
 
@@ -3514,7 +3519,7 @@ int GetKeyPressed(void)
             CORE.Input.Keyboard.keyPressedQueue[i] = CORE.Input.Keyboard.keyPressedQueue[i + 1];
 
         // Reset last character in the queue
-        CORE.Input.Keyboard.keyPressedQueue[CORE.Input.Keyboard.keyPressedQueueCount] = 0;
+        CORE.Input.Keyboard.keyPressedQueue[CORE.Input.Keyboard.keyPressedQueueCount - 1] = 0;
         CORE.Input.Keyboard.keyPressedQueueCount--;
     }
 
@@ -3536,7 +3541,7 @@ int GetCharPressed(void)
             CORE.Input.Keyboard.charPressedQueue[i] = CORE.Input.Keyboard.charPressedQueue[i + 1];
 
         // Reset last character in the queue
-        CORE.Input.Keyboard.charPressedQueue[CORE.Input.Keyboard.charPressedQueueCount] = 0;
+        CORE.Input.Keyboard.charPressedQueue[CORE.Input.Keyboard.charPressedQueueCount - 1] = 0;
         CORE.Input.Keyboard.charPressedQueueCount--;
     }
 
@@ -5387,7 +5392,7 @@ static void CharCallback(GLFWwindow *window, unsigned int key)
     // Ref: https://www.glfw.org/docs/latest/input_guide.html#input_char
 
     // Check if there is space available in the queue
-    if (CORE.Input.Keyboard.charPressedQueueCount < MAX_KEY_PRESSED_QUEUE)
+    if (CORE.Input.Keyboard.charPressedQueueCount < MAX_CHAR_PRESSED_QUEUE)
     {
         // Add character to the queue
         CORE.Input.Keyboard.charPressedQueue[CORE.Input.Keyboard.charPressedQueueCount] = key;
