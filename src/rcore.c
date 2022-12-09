@@ -5223,26 +5223,43 @@ static void WindowSizeCallback(GLFWwindow *window, int width, int height)
     CORE.Window.currentFbo.height = height;
     CORE.Window.resizedLastFrame = true;
 
-    if (IsWindowFullscreen()) return;
-
-    // Set current screen size
-#if defined(__APPLE__)
-    CORE.Window.screen.width = width;
-    CORE.Window.screen.height = height;
-#else
-    if ((CORE.Window.flags & FLAG_WINDOW_HIGHDPI) > 0)
+    if (IsWindowFullscreen())
     {
-        Vector2 windowScaleDPI = GetWindowScaleDPI();
+        GLFWmonitor* monitor = glfwGetWindowMonitor(window);
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
 
-        CORE.Window.screen.width = (unsigned int)(width/windowScaleDPI.x);
-        CORE.Window.screen.height = (unsigned int)(height/windowScaleDPI.y);
+        CORE.Window.screen.width = CORE.Window.display.width = mode->width;
+        CORE.Window.screen.height = CORE.Window.display.height = mode->height;
+
+        // remember center for switchinging from fullscreen to window
+        CORE.Window.position.x = CORE.Window.display.width / 2 - CORE.Window.screen.width / 2;
+        CORE.Window.position.y = CORE.Window.display.height / 2 - CORE.Window.screen.height / 2;
+
+        CORE.Window.render.width = CORE.Window.screen.width;
+        CORE.Window.render.height = CORE.Window.screen.height;
+        CORE.Window.renderOffset.x = 0;
+        CORE.Window.renderOffset.y = 0;
     }
-    else
-    {
+    else {
+        // Set current screen size
+#if defined(__APPLE__)
         CORE.Window.screen.width = width;
         CORE.Window.screen.height = height;
-    }
+#else
+        if ((CORE.Window.flags & FLAG_WINDOW_HIGHDPI) > 0)
+        {
+            Vector2 windowScaleDPI = GetWindowScaleDPI();
+
+            CORE.Window.screen.width = (unsigned int)(width / windowScaleDPI.x);
+            CORE.Window.screen.height = (unsigned int)(height / windowScaleDPI.y);
+        }
+        else
+        {
+            CORE.Window.screen.width = width;
+            CORE.Window.screen.height = height;
+        }
 #endif
+    }
 
     // NOTE: Postprocessing texture is not scaled to new size
 }
